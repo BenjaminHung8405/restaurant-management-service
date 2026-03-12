@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express, { Application, NextFunction, Request, Response } from 'express';
 import errorHandler from './middlewares/errorHandler';
+import authRoutes from './routes/authRoutes';
 import AppError from './utils/AppError';
 
 const app: Application = express();
@@ -24,8 +25,7 @@ app.get('/api/v1/health', (_req: Request, res: Response) => {
 });
 
 // --- Application Routes ---
-// TODO: Mount feature routes here as they are developed
-// e.g., app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/auth', authRoutes);
 
 // --- Unhandled Route Handler (404) ---
 // Bắt tất cả các request đến route không tồn tại và chuyển sang errorHandler
