@@ -4,6 +4,7 @@ import errorHandler from './middlewares/errorHandler';
 import authRoutes from './routes/authRoutes';
 import categoryRoutes from './routes/categoryRoutes';
 import menuItemRoutes from './routes/menuItemRoutes';
+import reservationRoutes from './routes/reservationRoutes';
 import tableRoutes from './routes/tableRoutes';
 import AppError from './utils/AppError';
 
@@ -32,6 +33,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/menu-items', menuItemRoutes);
 app.use('/api/v1/tables', tableRoutes);
+app.use('/api/v1/reservations', reservationRoutes);
 
 // --- Unhandled Route Handler (404) ---
 // Bắt tất cả các request đến route không tồn tại và chuyển sang errorHandler
