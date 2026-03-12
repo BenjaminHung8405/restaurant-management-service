@@ -1,0 +1,21 @@
+meta {
+  name: Assign Reservation
+  type: http
+  seq: 1
+}
+
+put {
+  url: http://localhost:5000/api/v1/reservations/6e4c5f24-7683-4f66-9490-97a0928ba0db/assign
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZmZDg3MjdjLThjZDUtNDE5OC1iZjhiLTIwMWU2ODk5ODdlYiIsImVtYWlsIjoiYWRtaW5AZnVlbG1ldC5jb20iLCJyb2xlIjoiYWRtaW4iLCJpYXQiOjE3NzMzMDMwMTMsImV4cCI6MTc3MzkwNzgxM30.V6pf5ioWgbE96PMRJWMcfg2vR1kQeqpuyTyc-60uWPA
+}
+
+body:json {
+  {
+  "table_id": "2c8280e0-e0ca-47e2-b291-b2968765700d"
+  }
+}
