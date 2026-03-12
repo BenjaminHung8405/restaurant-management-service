@@ -4,6 +4,7 @@ import errorHandler from './middlewares/errorHandler';
 import authRoutes from './routes/authRoutes';
 import categoryRoutes from './routes/categoryRoutes';
 import menuItemRoutes from './routes/menuItemRoutes';
+import tableRoutes from './routes/tableRoutes';
 import AppError from './utils/AppError';
 
 const app: Application = express();
@@ -30,6 +31,7 @@ app.get('/api/v1/health', (_req: Request, res: Response) => {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/menu-items', menuItemRoutes);
+app.use('/api/v1/tables', tableRoutes);
 
 // --- Unhandled Route Handler (404) ---
 // Bắt tất cả các request đến route không tồn tại và chuyển sang errorHandler
