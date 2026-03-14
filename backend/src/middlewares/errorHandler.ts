@@ -9,15 +9,17 @@ import AppError from '../utils/AppError';
  * được ném ra hoặc truyền qua `next(err)` từ các route/middleware phía trên.
  */
 const errorHandler = (
-  err: Error | AppError,
+  err: unknown,
   _req: Request,
   res: Response,
   // Express requires the 4-argument signature to recognise this as error middleware
   _next: NextFunction
 ): void => {
+  const normalizedError = err instanceof Error ? err : new Error('Unknown error');
+
   // Log stack trace trong môi trường phát triển để dễ debug
   if (process.env.NODE_ENV !== 'production') {
-    console.error('ERROR STACK:', err.stack);
+    console.error('ERROR STACK:', normalizedError.stack);
   }
 
   // Nếu là lỗi vận hành (AppError), dùng statusCode và message đã định nghĩa sẵn
@@ -36,7 +38,7 @@ const errorHandler = (
     success: false,
     message: 'Internal Server Error',
     data: null,
-    error: process.env.NODE_ENV !== 'production' ? err.stack : null,
+    error: process.env.NODE_ENV !== 'production' ? normalizedError.stack : null,
   });
 };
 
