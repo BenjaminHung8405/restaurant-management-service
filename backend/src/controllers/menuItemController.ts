@@ -4,9 +4,13 @@ import * as menuItemService from '../services/menuItemService';
 /**
  * GET /api/v1/menu-items
  * GET /api/v1/menu-items?categoryId=<uuid>
+ * GET /api/v1/menu-items?isFeatured=true
+ * GET /api/v1/menu-items?categoryId=<uuid>&isFeatured=true
  *
  * Lấy toàn bộ danh sách menu items.
- * Hỗ trợ lọc tuỳ chọn qua query param `categoryId`.
+ * Hỗ trợ lọc tuỳ chọn qua query params:
+ * - `categoryId`: UUID của category cần lọc
+ * - `isFeatured`: boolean để lọc chỉ các featured items (default: undefined)
  * @access Public
  */
 export const getAll = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -14,7 +18,10 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
     // Lấy categoryId từ query string; undefined nếu không có
     const categoryId = req.query.categoryId as string | undefined;
 
-    const items = await menuItemService.getAllMenuItems(categoryId);
+    // Lấy isFeatured từ query string; evaluate as boolean nếu có, undefined nếu không
+    const isFeatured = req.query.isFeatured === 'true' ? true : req.query.isFeatured === 'false' ? false : undefined;
+
+    const items = await menuItemService.getAllMenuItems(categoryId, isFeatured);
 
     res.status(200).json({
       success: true,
@@ -56,7 +63,7 @@ export const getOne = async (req: Request, res: Response, next: NextFunction): P
  */
 export const create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { category_id, name, description, price, image_url, area, is_available } = req.body as {
+    const { category_id, name, description, price, image_url, area, is_available, is_featured } = req.body as {
       category_id: string;
       name: string;
       description?: string;
@@ -64,6 +71,7 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
       image_url?: string;
       area?: string;
       is_available?: boolean;
+      is_featured?: boolean;
     };
 
     const item = await menuItemService.createMenuItem({
@@ -74,6 +82,7 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
       image_url,
       area,
       is_available,
+      is_featured,
     });
 
     res.status(201).json({
@@ -95,7 +104,7 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
  */
 export const update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { category_id, name, description, price, image_url, area, is_available } = req.body as {
+    const { category_id, name, description, price, image_url, area, is_available, is_featured } = req.body as {
       category_id?: string;
       name?: string;
       description?: string;
@@ -103,6 +112,7 @@ export const update = async (req: Request, res: Response, next: NextFunction): P
       image_url?: string;
       area?: string;
       is_available?: boolean;
+      is_featured?: boolean;
     };
 
     const item = await menuItemService.updateMenuItem(req.params.id as string, {
@@ -113,6 +123,7 @@ export const update = async (req: Request, res: Response, next: NextFunction): P
       image_url,
       area,
       is_available,
+      is_featured,
     });
 
     res.status(200).json({

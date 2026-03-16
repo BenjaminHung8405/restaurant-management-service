@@ -7,14 +7,15 @@ import {
 import AppError from '../utils/AppError';
 
 /**
- * Lấy toàn bộ danh sách menu items, hỗ trợ lọc tuỳ chọn theo category_id.
- * Truyền `categoryId` xuống repository để lọc ngay tại tầng DB.
+ * Lấy toàn bộ danh sách menu items, hỗ trợ lọc tuỳ chọn theo category_id và is_featured.
+ * Truyền các filter parameters xuống repository để lọc ngay tại tầng DB.
  *
  * @param categoryId - (tuỳ chọn) UUID của category cần lọc
+ * @param isFeatured - (tuỳ chọn) boolean để lọc chỉ các featured items
  * @returns Mảng IMenuItemRow
  */
-export const getAllMenuItems = async (categoryId?: string): Promise<IMenuItemRow[]> => {
-  return menuItemRepository.findAll(categoryId);
+export const getAllMenuItems = async (categoryId?: string, isFeatured?: boolean): Promise<IMenuItemRow[]> => {
+  return menuItemRepository.findAll(categoryId, isFeatured);
 };
 
 /**
