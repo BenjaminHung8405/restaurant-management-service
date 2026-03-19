@@ -5,6 +5,13 @@ import { protect, restrictTo } from '../middlewares/authMiddleware';
 const router = Router();
 
 /**
+ * @route  GET /api/v1/tables/available
+ * @desc   Lấy danh sách bàn có sẵn (cho khách hàng chọn bàn)
+ * @access Public
+ */
+router.get('/available', tableController.getAll);
+
+/**
  * @route  GET /api/v1/tables
  * @desc   Lấy toàn bộ danh sách bàn
  * @access Private (admin, staff)
