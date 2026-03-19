@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import AppError from '../../utils/AppError';
 
 /**
@@ -8,9 +8,32 @@ import AppError from '../../utils/AppError';
  */
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
+  ssl: process.env.NODE_ENV === 'production' ? {
     rejectUnauthorized: true, // Enforce CA verification in production
+  } : {
+    rejectUnauthorized: false, // Allow self-signed certs in dev
   },
+  // Pool configuration tuned for Neon serverless
+  max: 10, // Maximum number of clients in the pool
+  min: 2, // Minimum number of clients to keep in pool
+  idleTimeoutMillis: 30000, // How long a client can sit idle before being removed
+  connectionTimeoutMillis: 10000, // How long to wait when acquiring a client
+});
+
+/**
+ * Error handling for pool-level errors
+ */
+pool.on('error', (err: Error) => {
+  console.error('Unexpected error on idle client in pool:', err);
+  process.exit(-1);
+});
+
+pool.on('connect', () => {
+  console.debug('New client connected to pool');
+});
+
+pool.on('remove', () => {
+  console.debug('Client removed from pool');
 });
 
 /**
@@ -20,14 +43,20 @@ const pool = new Pool({
  * @throws {AppError} Ném lỗi 500 nếu kết nối thất bại, ngăn server khởi động.
  */
 export const connectDB = async (): Promise<void> => {
+  let client: PoolClient | null = null;
   try {
-    await pool.query('SELECT 1');
+    client = await pool.connect();
+    await client.query('SELECT NOW()');
     console.log('Neon PostgreSQL connected successfully');
   } catch (err) {
     throw new AppError(
       `Database connection failed: ${err instanceof Error ? err.message : String(err)}`,
       500,
     );
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 };
 

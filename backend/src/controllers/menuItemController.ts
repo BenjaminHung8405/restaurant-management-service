@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import * as menuItemService from '../services/menuItemService';
+import AppError from '../utils/AppError';
 
 /**
  * GET /api/v1/menu-items
@@ -30,6 +31,13 @@ export const getAll = async (req: Request, res: Response, next: NextFunction): P
       error: null,
     });
   } catch (err) {
+    // Handle AggregateError from pg-pool connection issues
+    if (err instanceof AggregateError) {
+      return next(new AppError(
+        'Database connection error. Please try again in a moment.',
+        503,
+      ));
+    }
     next(err);
   }
 };
