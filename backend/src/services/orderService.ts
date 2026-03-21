@@ -11,7 +11,7 @@ import AppError from '../utils/AppError';
  * ICreateOrderInput - DTO đầu vào từ controller khi tạo order mới.
  */
 export interface ICreateOrderInput {
-  user_id: string;
+  user_id: string | null;
   table_id?: string | null;
   items: ICreateOrderItem[];
 }

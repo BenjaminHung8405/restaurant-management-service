@@ -5,7 +5,7 @@ import pool from '../database/postgres';
  */
 export interface IOrderRow {
   id: string;
-  user_id: string;
+  user_id: string | null;
   table_id: string | null;
   total_amount: number;
   order_status: string;
@@ -47,7 +47,7 @@ export interface ICreateOrderItem {
  * ICreateOrderData - DTO cho thao tác tạo order mới.
  */
 export interface ICreateOrderData {
-  user_id: string;
+  user_id: string | null;
   table_id?: string | null;
   total_amount: number;
   order_status?: string;

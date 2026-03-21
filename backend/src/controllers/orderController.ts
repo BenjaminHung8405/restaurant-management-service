@@ -56,14 +56,26 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
       items: ICreateOrderItem[];
     };
 
+    // 📥 Log incoming request
+    const timestamp = new Date().toISOString();
+    console.log(`[ORDER] 📥 New order request received at ${timestamp}`);
+    console.log(`[ORDER] 📥 Table ID: ${table_id || 'GUEST'} | Items in cart: ${items.length}`);
+
     // Validate items tại tầng Controller trước khi xuống Service
     if (!Array.isArray(items) || items.length === 0) {
+      console.warn(`[ORDER] ⚠️ Validation failed: Order must contain at least one item`);
       return next(new AppError('Order must contain at least one item', 400));
     }
 
-    const user_id = String(req.user!.id);
+    // Safely extract user ID using optional chaining - null for guest orders
+    const user_id = req.user?.id ? String(req.user.id) : null;
+    console.log(`[ORDER] 👤 User ID: ${user_id || 'GUEST_USER'}`);
 
     const newOrder = await orderService.createOrder({ user_id, table_id, items });
+
+    // ✅ Log successful order creation
+    console.log(`[ORDER] ✅ Order successfully created! Order ID: ${newOrder.order.id}`);
+    console.log(`[ORDER] ✅ Total items: ${newOrder.items.length} | Total amount: ${newOrder.order.total_amount}`);
 
     res.status(201).json({
       success: true,
@@ -72,6 +84,9 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
       error: null,
     });
   } catch (err) {
+    // ❌ Log the exact database or service error for debugging
+    console.error(`[ORDER] ❌ Failed to create order:`, err);
+    console.error(`[ORDER] ❌ Error stack:`, (err as Error)?.stack || 'No stack trace');
     next(err);
   }
 };

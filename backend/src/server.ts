@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import http from 'http';
 import app from './app';
-import { connectDB } from './infrastructure/database/postgres';
+import pool, { connectDB } from './infrastructure/database/postgres';
 
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -31,6 +31,42 @@ process.on('uncaughtException', (err: Error) => {
   console.error(err.name, err.message);
   process.exit(1);
 });
+
+// --- Graceful Shutdown Handler ---
+/**
+ * Xử lý tắt server một cách an toàn (gracefully).
+ * Đóng HTTP server trước, sau đó đóng database connection pool.
+ * Điều này ngăn chặn "zombie processes" bị kết nối DB giữ sống.
+ */
+const gracefulShutdown = async (): Promise<void> => {
+  console.log('\n🛑 GRACEFUL SHUTDOWN: Process signal received');
+
+  console.log('⏳ Closing HTTP server...');
+  server.close(async () => {
+    console.log('✅ HTTP server closed');
+
+    console.log('⏳ Closing database connection pool...');
+    try {
+      await pool.end();
+      console.log('✅ Database connection pool closed');
+    } catch (err) {
+      console.error('❌ Error closing database pool:', err);
+    }
+
+    console.log('🎯 Process exiting with exit code 0');
+    process.exit(0);
+  });
+
+  // If server doesn't close within 5 seconds, force exit
+  setTimeout(() => {
+    console.error('⚠️ Server did not close gracefully within 5 seconds. Force-exiting...');
+    process.exit(1);
+  }, 5000);
+};
+
+// Listen for termination signals
+process.on('SIGINT', gracefulShutdown);  // Ctrl + C
+process.on('SIGTERM', gracefulShutdown); // Kill signal
 
 // --- Start Server ---
 /**
