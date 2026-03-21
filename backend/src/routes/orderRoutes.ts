@@ -10,8 +10,8 @@ router.get('/', protect, restrictTo('admin', 'staff'), orderController.getAll);
 // GET /api/v1/orders/:id — chỉ admin và staff
 router.get('/:id', protect, restrictTo('admin', 'staff'), orderController.getOne);
 
-// POST /api/v1/orders — mọi user đã đăng nhập
-router.post('/', protect, orderController.create);
+// POST /api/v1/orders — công khai cho guest users
+router.post('/', orderController.create);
 
 // PUT /api/v1/orders/:id — chỉ admin và staff
 router.put('/:id', protect, restrictTo('admin', 'staff'), orderController.update);
