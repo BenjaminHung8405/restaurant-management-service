@@ -3,25 +3,38 @@ import pool from '../database/postgres';
 /**
  * IReservationRow - Kiểu dữ liệu ánh xạ trực tiếp từ bảng `reservations` trong PostgreSQL.
  * Dùng snake_case để khớp chính xác với tên cột trong DB.
+ * 
+ * Hỗ trợ Guest Reservations:
+ * - user_id: nullable (null = guest reservation, not null = authenticated user)
+ * - guest_name: required (tên khách hàng, dùng cho guest hoặc reference tên user)
+ * - guest_phone: required (số điện thoại liên hệ)
  */
 export interface IReservationRow {
   id: string;
-  user_id: string;
+  user_id: string | null;
   table_id: string | null;
   reservation_time: Date;
   guest_count: number;
+  guest_name: string;
+  guest_phone: string;
   notes: string | null;
   status: string;
 }
 
 /**
  * ICreateReservationData - DTO cho thao tác tạo đặt bàn mới.
+ * 
+ * Hỗ trợ 2 loại đặt bàn:
+ * 1. Authenticated User: user_id được set từ JWT, guest_name/phone có thể để trống (lấy từ user account)
+ * 2. Guest: user_id = null, guest_name & guest_phone bắt buộc
  */
 export interface ICreateReservationData {
-  user_id: string;
+  user_id?: string | null;
   table_id?: string | null;
   reservation_time: string;
   guest_count: number;
+  guest_name?: string;
+  guest_phone?: string;
   notes?: string | null;
   status?: string;
 }
@@ -33,6 +46,8 @@ export interface IUpdateReservationData {
   table_id?: string | null;
   reservation_time?: string;
   guest_count?: number;
+  guest_name?: string;
+  guest_phone?: string;
   notes?: string | null;
   status?: string;
 }
@@ -49,7 +64,7 @@ export interface IUpdateReservationData {
 export const findAll = async (userId?: string): Promise<IReservationRow[]> => {
   if (userId) {
     const result = await pool.query<IReservationRow>(
-      `SELECT id, user_id, table_id, reservation_time, guest_count, notes, status
+      `SELECT id, user_id, table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status
        FROM reservations
        WHERE user_id = $1
        ORDER BY reservation_time DESC`,
@@ -59,7 +74,7 @@ export const findAll = async (userId?: string): Promise<IReservationRow[]> => {
   }
 
   const result = await pool.query<IReservationRow>(
-    `SELECT id, user_id, table_id, reservation_time, guest_count, notes, status
+    `SELECT id, user_id, table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status
      FROM reservations
      ORDER BY reservation_time DESC`,
   );
@@ -74,7 +89,7 @@ export const findAll = async (userId?: string): Promise<IReservationRow[]> => {
  */
 export const findById = async (id: string): Promise<IReservationRow | null> => {
   const result = await pool.query<IReservationRow>(
-    `SELECT id, user_id, table_id, reservation_time, guest_count, notes, status
+    `SELECT id, user_id, table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status
      FROM reservations
      WHERE id = $1 LIMIT 1`,
     [id],
@@ -85,17 +100,30 @@ export const findById = async (id: string): Promise<IReservationRow | null> => {
 /**
  * Tạo đặt bàn mới và trả về row vừa tạo.
  * RETURNING * để lấy đầy đủ dữ liệu bao gồm id UUID do DB sinh ra.
+ * 
+ * Hỗ trợ Guest Reservations:
+ * - user_id = null: guest reservation (bắt buộc guest_name & guest_phone)
+ * - user_id != null: authenticated user reservation (guest_name/phone từ user account)
  *
  * @returns IReservationRow - đặt bàn vừa tạo
  */
 export const create = async (data: ICreateReservationData): Promise<IReservationRow> => {
-  const { user_id, table_id = null, reservation_time, guest_count, notes = null, status = 'pending' } = data;
+  const { 
+    user_id = null, 
+    table_id = null, 
+    reservation_time, 
+    guest_count, 
+    guest_name = '', 
+    guest_phone = '', 
+    notes = null, 
+    status = 'pending' 
+  } = data;
 
   const result = await pool.query<IReservationRow>(
-    `INSERT INTO reservations (user_id, table_id, reservation_time, guest_count, notes, status)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO reservations (user_id, table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [user_id, table_id, reservation_time, guest_count, notes, status],
+    [user_id, table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status],
   );
   return result.rows[0];
 };
@@ -107,18 +135,20 @@ export const create = async (data: ICreateReservationData): Promise<IReservation
  * @returns IReservationRow sau khi cập nhật, null nếu không tìm thấy
  */
 export const update = async (id: string, data: IUpdateReservationData): Promise<IReservationRow | null> => {
-  const { table_id, reservation_time, guest_count, notes, status } = data;
+  const { table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status } = data;
 
   const result = await pool.query<IReservationRow>(
     `UPDATE reservations
      SET table_id         = COALESCE($1, table_id),
          reservation_time = COALESCE($2, reservation_time),
          guest_count      = COALESCE($3, guest_count),
-         notes            = COALESCE($4, notes),
-         status           = COALESCE($5, status)
-     WHERE id = $6
+         guest_name       = COALESCE($4, guest_name),
+         guest_phone      = COALESCE($5, guest_phone),
+         notes            = COALESCE($6, notes),
+         status           = COALESCE($7, status)
+     WHERE id = $8
      RETURNING *`,
-    [table_id ?? null, reservation_time ?? null, guest_count ?? null, notes ?? null, status ?? null, id],
+    [table_id ?? null, reservation_time ?? null, guest_count ?? null, guest_name ?? null, guest_phone ?? null, notes ?? null, status ?? null, id],
   );
   return result.rows[0] ?? null;
 };

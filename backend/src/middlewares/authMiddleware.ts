@@ -31,6 +31,32 @@ export const protect = (req: Request, _res: Response, next: NextFunction): void 
 };
 
 /**
+ * `optionalProtect` - Middleware xác thực tuỳ chọn.
+ *
+ * Nếu có Bearer token hợp lệ thì gắn payload vào `req.user`.
+ * Nếu không có token (hoặc token lỗi), request vẫn tiếp tục như guest.
+ */
+export const optionalProtect = (req: Request, _res: Response, next: NextFunction): void => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    next();
+    return;
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = verifyToken(token);
+    req.user = decoded;
+  } catch (err) {
+    console.warn('optionalProtect: invalid token, fallback to guest request');
+  }
+
+  next();
+};
+
+/**
  * `restrictTo` - Middleware factory phân quyền (Authorization).
  *
  * Trả về một middleware kiểm tra xem role của người dùng đang đăng nhập

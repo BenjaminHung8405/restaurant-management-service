@@ -67,9 +67,11 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
     // Lấy user_id từ JWT payload — không bao giờ tin tưởng giá trị từ body
     const user_id = String(req.user!.id);
 
-    const { reservation_time, guest_count, notes } = req.body as {
+    const { reservation_time, guest_count, guest_name, guest_phone, notes } = req.body as {
       reservation_time: string;
       guest_count: number;
+      guest_name?: string;
+      guest_phone?: string;
       notes?: string;
     };
 
@@ -77,6 +79,8 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
       user_id,
       reservation_time,
       guest_count,
+      guest_name: guest_name || '',
+      guest_phone: guest_phone || '',
       notes,
       // table_id không được customer cung cấp — DB default là null
     });
@@ -84,6 +88,45 @@ export const create = async (req: Request, res: Response, next: NextFunction): P
     res.status(201).json({
       success: true,
       message: 'Reservation created successfully',
+      data: reservation,
+      error: null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/v1/reservations/guest
+ * 
+ * Public endpoint cho guest đặt bàn mà không cần đăng nhập.
+ * Bắt buộc: guest_name, guest_phone, reservation_time, guest_count
+ * Tùy chọn: notes
+ * 
+ * @access Public (no authentication required)
+ */
+export const createGuestReservation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { reservation_time, guest_count, guest_name, guest_phone, notes } = req.body as {
+      reservation_time: string;
+      guest_count: number;
+      guest_name: string;
+      guest_phone: string;
+      notes?: string;
+    };
+
+    const reservation = await reservationService.createReservation({
+      user_id: null,
+      reservation_time,
+      guest_count,
+      guest_name,
+      guest_phone,
+      notes,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Guest reservation created successfully',
       data: reservation,
       error: null,
     });

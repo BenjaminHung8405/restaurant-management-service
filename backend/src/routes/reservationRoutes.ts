@@ -5,6 +5,13 @@ import { protect, restrictTo } from '../middlewares/authMiddleware';
 const router = Router();
 
 /**
+ * @route  POST /api/v1/reservations/guest
+ * @desc   Tạo đặt bàn mới cho guest (không cần đăng nhập)
+ * @access Public
+ */
+router.post('/guest', reservationController.createGuestReservation);
+
+/**
  * @route  GET /api/v1/reservations
  * @desc   Lấy danh sách đặt bàn (customer thấy của mình, admin/staff thấy tất cả)
  * @access Private (all authenticated)

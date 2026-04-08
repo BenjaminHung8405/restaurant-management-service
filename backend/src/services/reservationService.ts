@@ -32,13 +32,28 @@ export const getReservationById = async (id: string): Promise<IReservationRow> =
 /**
  * Tạo đặt bàn mới.
  * Validate guest_count > 0 trước khi ghi vào DB.
+ * 
+ * Hỗ trợ 2 loại:
+ * 1. Authenticated: user_id từ JWT, guest_name/phone tùy chọn
+ * 2. Guest: user_id = null, bắt buộc guest_name & guest_phone
  *
  * @throws {AppError} 400 nếu guest_count không hợp lệ
+ * @throws {AppError} 400 nếu là guest nhưng thiếu guest_name hoặc guest_phone
  * @throws {AppError} 400 nếu table_id không tồn tại (FK violation)
  */
 export const createReservation = async (data: ICreateReservationData): Promise<IReservationRow> => {
   if (data.guest_count <= 0) {
     throw new AppError('guest_count must be greater than 0', 400);
+  }
+
+  // Validation cho guest reservations
+  if (!data.user_id) {
+    if (!data.guest_name || data.guest_name.trim() === '') {
+      throw new AppError('guest_name is required for guest reservations', 400);
+    }
+    if (!data.guest_phone || data.guest_phone.trim() === '') {
+      throw new AppError('guest_phone is required for guest reservations', 400);
+    }
   }
 
   try {
