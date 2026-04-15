@@ -60,12 +60,12 @@ export const findAll = async (categoryId?: string, isFeatured?: boolean): Promis
   const params: (string | boolean)[] = [];
 
   if (categoryId) {
-    whereClauses.push(`category_id = $${params.length + 1}`);
+    whereClauses.push(`category_id = ?`);
     params.push(categoryId);
   }
 
   if (isFeatured !== undefined) {
-    whereClauses.push(`is_featured = $${params.length + 1}`);
+    whereClauses.push(`is_featured = ?`);
     params.push(isFeatured);
   }
 
@@ -77,29 +77,29 @@ export const findAll = async (categoryId?: string, isFeatured?: boolean): Promis
                  ${whereClause}
                  ORDER BY name ASC`;
 
-  const result = await pool.query<IMenuItemRow>(query, params);
-  return result.rows;
+  const [rows] = await pool.query<IMenuItemRow[]>(query, params);
+  return rows;
 };
 
 /**
  * Tìm menu item theo id (UUID).
- * Dùng parameterized query ($1) để ngăn SQL Injection.
+ * Dùng parameterized query (?) để ngăn SQL Injection.
  *
  * @returns IMenuItemRow nếu tìm thấy, null nếu không tồn tại
  */
 export const findById = async (id: string): Promise<IMenuItemRow | null> => {
-  const result = await pool.query<IMenuItemRow>(
+  const [rows] = await pool.query<IMenuItemRow[]>(
     `SELECT id, category_id, name, description, price, image_url, area, is_available, is_featured
      FROM menu_items
-     WHERE id = $1 LIMIT 1`,
+     WHERE id = ? LIMIT 1`,
     [id],
   );
-  return result.rows[0] ?? null;
+  return rows[0] ?? null;
 };
 
 /**
  * Tạo menu item mới và trả về row vừa tạo.
- * RETURNING * để lấy đầy đủ dữ liệu bao gồm id UUID do DB sinh ra.
+ * MySQL không hỗ trợ RETURNING, nên INSERT rồi SELECT lại.
  *
  * @returns IMenuItemRow - menu item vừa tạo
  */
@@ -115,36 +115,40 @@ export const create = async (data: ICreateMenuItemData): Promise<IMenuItemRow> =
     is_featured = false,
   } = data;
 
-  const result = await pool.query<IMenuItemRow>(
+  const [insertResult] = await pool.query(
     `INSERT INTO menu_items (category_id, name, description, price, image_url, area, is_available, is_featured)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING *`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [category_id, name, description, price, image_url, area, is_available, is_featured],
   );
-  return result.rows[0];
+
+  const [rows] = await pool.query<IMenuItemRow[]>(
+    'SELECT * FROM menu_items WHERE id = ?',
+    [(insertResult as any).insertId],
+  );
+
+  return rows[0];
 };
 
 /**
  * Cập nhật menu item theo id. Chỉ set các cột có giá trị được truyền vào.
- * Dùng RETURNING * để trả về row sau khi cập nhật.
+ * MySQL không hỗ trợ RETURNING, nên UPDATE rồi SELECT lại.
  *
  * @returns IMenuItemRow sau khi cập nhật, null nếu không tìm thấy
  */
 export const update = async (id: string, data: IUpdateMenuItemData): Promise<IMenuItemRow | null> => {
   const { category_id, name, description, price, image_url, area, is_available, is_featured } = data;
 
-  const result = await pool.query<IMenuItemRow>(
+  await pool.query(
     `UPDATE menu_items
-     SET category_id  = COALESCE($1, category_id),
-         name         = COALESCE($2, name),
-         description  = COALESCE($3, description),
-         price        = COALESCE($4, price),
-         image_url    = COALESCE($5, image_url),
-         area         = COALESCE($6, area),
-         is_available = COALESCE($7, is_available),
-         is_featured  = COALESCE($8, is_featured)
-     WHERE id = $9
-     RETURNING *`,
+     SET category_id  = COALESCE(?, category_id),
+         name         = COALESCE(?, name),
+         description  = COALESCE(?, description),
+         price        = COALESCE(?, price),
+         image_url    = COALESCE(?, image_url),
+         area         = COALESCE(?, area),
+         is_available = COALESCE(?, is_available),
+         is_featured  = COALESCE(?, is_featured)
+     WHERE id = ?`,
     [
       category_id ?? null,
       name ?? null,
@@ -157,19 +161,32 @@ export const update = async (id: string, data: IUpdateMenuItemData): Promise<IMe
       id,
     ],
   );
-  return result.rows[0] ?? null;
+
+  const [rows] = await pool.query<IMenuItemRow[]>(
+    'SELECT * FROM menu_items WHERE id = ?',
+    [id],
+  );
+
+  return rows[0] ?? null;
 };
 
 /**
  * Xoá menu item theo id.
- * Dùng RETURNING * để xác nhận bản ghi tồn tại trước khi xoá.
+ * MySQL không hỗ trợ RETURNING, nên SELECT trước rồi DELETE sau.
  *
  * @returns IMenuItemRow vừa bị xoá, null nếu không tìm thấy
  */
 export const remove = async (id: string): Promise<IMenuItemRow | null> => {
-  const result = await pool.query<IMenuItemRow>(
-    'DELETE FROM menu_items WHERE id = $1 RETURNING *',
+  const [rows] = await pool.query<IMenuItemRow[]>(
+    'SELECT * FROM menu_items WHERE id = ?',
     [id],
   );
-  return result.rows[0] ?? null;
+  const dataToReturn = rows[0];
+
+  await pool.query(
+    'DELETE FROM menu_items WHERE id = ?',
+    [id],
+  );
+
+  return dataToReturn ?? null;
 };

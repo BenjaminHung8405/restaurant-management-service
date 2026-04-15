@@ -42,33 +42,37 @@ export interface ICreateUserData {
  * Tìm user theo email. Trả về toàn bộ row (bao gồm password_hash)
  * để Service layer có thể thực hiện so sánh mật khẩu.
  *
- * Dùng parameterized query ($1) để ngăn SQL Injection.
+ * Dùng parameterized query (?) để ngăn SQL Injection.
  *
  * @returns IUserRow nếu tìm thấy, null nếu không tồn tại
  */
 export const findByEmail = async (email: string): Promise<IUserRow | null> => {
-  const result = await pool.query<IUserRow>(
-    'SELECT id, email, password_hash, full_name, phone_number, role, created_at, updated_at FROM users WHERE email = $1 LIMIT 1',
+  const [rows] = await pool.query<IUserRow[]>(
+    'SELECT id, email, password_hash, full_name, phone_number, role, created_at, updated_at FROM users WHERE email = ? LIMIT 1',
     [email],
   );
-  return result.rows[0] ?? null;
+  return rows[0] ?? null;
 };
 
 /**
  * Tạo user mới và trả về thông tin công khai (không có password_hash).
- * RETURNING chỉ lấy các cột cần thiết để không bao giờ expose hash.
+ * MySQL không hỗ trợ RETURNING, nên INSERT rồi SELECT lại.
  *
  * @returns IUserPublic - thông tin user vừa tạo
  */
 export const createUser = async (userData: ICreateUserData): Promise<IUserPublic> => {
   const { email, passwordHash, full_name, phone_number = null, role = 'customer' } = userData;
 
-  const result = await pool.query<IUserPublic>(
+  const [insertResult] = await pool.query(
     `INSERT INTO users (email, password_hash, full_name, phone_number, role)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, email, full_name, role`,
+     VALUES (?, ?, ?, ?, ?)`,
     [email, passwordHash, full_name, phone_number, role],
   );
 
-  return result.rows[0];
+  const [rows] = await pool.query<IUserPublic[]>(
+    'SELECT id, email, full_name, role FROM users WHERE id = ?',
+    [(insertResult as any).insertId],
+  );
+
+  return rows[0];
 };

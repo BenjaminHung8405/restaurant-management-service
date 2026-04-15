@@ -35,75 +35,92 @@ export interface IUpdateCategoryData {
  * @returns Mảng ICategoryRow
  */
 export const findAll = async (): Promise<ICategoryRow[]> => {
-  const result = await pool.query<ICategoryRow>(
+  const [rows] = await pool.query<ICategoryRow[]>(
     'SELECT id, name, description, image_url FROM categories ORDER BY name ASC',
   );
-  return result.rows;
+  return rows;
 };
 
 /**
  * Tìm category theo id (UUID).
- * Dùng parameterized query ($1) để ngăn SQL Injection.
+ * Dùng parameterized query (?) để ngăn SQL Injection.
  *
  * @returns ICategoryRow nếu tìm thấy, null nếu không tồn tại
  */
 export const findById = async (id: string): Promise<ICategoryRow | null> => {
-  const result = await pool.query<ICategoryRow>(
-    'SELECT id, name, description, image_url FROM categories WHERE id = $1 LIMIT 1',
+  const [rows] = await pool.query<ICategoryRow[]>(
+    'SELECT id, name, description, image_url FROM categories WHERE id = ? LIMIT 1',
     [id],
   );
-  return result.rows[0] ?? null;
+  return rows[0] ?? null;
 };
 
 /**
  * Tạo category mới và trả về row vừa tạo.
- * RETURNING * để lấy đầy đủ dữ liệu bao gồm id UUID do DB sinh ra.
+ * MySQL không hỗ trợ RETURNING, nên INSERT rồi SELECT lại.
  *
  * @returns ICategoryRow - category vừa tạo
  */
 export const create = async (data: ICreateCategoryData): Promise<ICategoryRow> => {
   const { name, description = null, image_url = null } = data;
 
-  const result = await pool.query<ICategoryRow>(
+  const [insertResult] = await pool.query(
     `INSERT INTO categories (name, description, image_url)
-     VALUES ($1, $2, $3)
-     RETURNING *`,
+     VALUES (?, ?, ?)`,
     [name, description, image_url],
   );
-  return result.rows[0];
+
+  const [rows] = await pool.query<ICategoryRow[]>(
+    'SELECT * FROM categories WHERE id = ?',
+    [(insertResult as any).insertId],
+  );
+
+  return rows[0];
 };
 
 /**
  * Cập nhật category theo id. Chỉ set các cột có giá trị được truyền vào.
- * Dùng RETURNING * để trả về row sau khi cập nhật.
+ * MySQL không hỗ trợ RETURNING, nên UPDATE rồi SELECT lại.
  *
  * @returns ICategoryRow sau khi cập nhật, null nếu không tìm thấy
  */
 export const update = async (id: string, data: IUpdateCategoryData): Promise<ICategoryRow | null> => {
   const { name, description, image_url } = data;
 
-  const result = await pool.query<ICategoryRow>(
+  await pool.query(
     `UPDATE categories
-     SET name      = COALESCE($1, name),
-         description = COALESCE($2, description),
-         image_url = COALESCE($3, image_url)
-     WHERE id = $4
-     RETURNING *`,
+     SET name      = COALESCE(?, name),
+         description = COALESCE(?, description),
+         image_url = COALESCE(?, image_url)
+     WHERE id = ?`,
     [name ?? null, description ?? null, image_url ?? null, id],
   );
-  return result.rows[0] ?? null;
+
+  const [rows] = await pool.query<ICategoryRow[]>(
+    'SELECT * FROM categories WHERE id = ?',
+    [id],
+  );
+
+  return rows[0] ?? null;
 };
 
 /**
  * Xoá category theo id.
- * Dùng RETURNING * để xác nhận bản ghi tồn tại trước khi xoá.
+ * MySQL không hỗ trợ RETURNING, nên SELECT trước rồi DELETE sau.
  *
  * @returns ICategoryRow vừa bị xoá, null nếu không tìm thấy
  */
 export const remove = async (id: string): Promise<ICategoryRow | null> => {
-  const result = await pool.query<ICategoryRow>(
-    'DELETE FROM categories WHERE id = $1 RETURNING *',
+  const [rows] = await pool.query<ICategoryRow[]>(
+    'SELECT * FROM categories WHERE id = ?',
     [id],
   );
-  return result.rows[0] ?? null;
+  const dataToReturn = rows[0];
+
+  await pool.query(
+    'DELETE FROM categories WHERE id = ?',
+    [id],
+  );
+
+  return dataToReturn ?? null;
 };

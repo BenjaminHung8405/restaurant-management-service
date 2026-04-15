@@ -70,12 +70,12 @@ export interface IUpdateOrderData {
  * @returns Mảng IOrderRow
  */
 export const findAll = async (): Promise<IOrderRow[]> => {
-  const result = await pool.query<IOrderRow>(
+  const [rows] = await pool.query<IOrderRow[]>(
     `SELECT id, user_id, table_id, total_amount, order_status, payment_status, created_at
      FROM orders
      ORDER BY created_at DESC`,
   );
-  return result.rows;
+  return rows;
 };
 
 /**
@@ -84,23 +84,23 @@ export const findAll = async (): Promise<IOrderRow[]> => {
  * @returns IOrderWithItems nếu tìm thấy, null nếu không tồn tại
  */
 export const findById = async (id: string): Promise<IOrderWithItems | null> => {
-  const orderResult = await pool.query<IOrderRow>(
+  const [orderRows] = await pool.query<IOrderRow[]>(
     `SELECT id, user_id, table_id, total_amount, order_status, payment_status, created_at
      FROM orders
-     WHERE id = $1 LIMIT 1`,
+     WHERE id = ? LIMIT 1`,
     [id],
   );
 
-  if (!orderResult.rows[0]) return null;
+  if (!orderRows[0]) return null;
 
-  const itemsResult = await pool.query<IOrderItemRow>(
+  const [itemRows] = await pool.query<IOrderItemRow[]>(
     `SELECT id, order_id, menu_item_id, quantity, unit_price, notes
      FROM order_items
-     WHERE order_id = $1`,
+     WHERE order_id = ?`,
     [id],
   );
 
-  return { order: orderResult.rows[0], items: itemsResult.rows };
+  return { order: orderRows[0], items: itemRows };
 };
 
 /**
@@ -116,44 +116,54 @@ export const createOrderWithItems = async (
   orderData: ICreateOrderData,
   itemsArray: ICreateOrderItem[],
 ): Promise<IOrderWithItems> => {
-  const client = await pool.connect();
+  const connection = await (pool as any).getConnection();
 
   try {
-    await client.query('BEGIN');
+    await connection.beginTransaction();
 
     // Bước 1: Tạo order cha
     const { user_id, table_id = null, total_amount, order_status = 'pending', payment_status = 'unpaid' } = orderData;
 
-    const orderResult = await client.query<IOrderRow>(
+    const [orderInsertResult] = await connection.query(
       `INSERT INTO orders (user_id, table_id, total_amount, order_status, payment_status)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, user_id, table_id, total_amount, order_status, payment_status, created_at`,
+       VALUES (?, ?, ?, ?, ?)`,
       [user_id, table_id, total_amount, order_status, payment_status],
     );
 
-    const order = orderResult.rows[0];
+    // Get lại order cha vừa tạo
+    const [orderRows] = await connection.query<IOrderRow[]>(
+      `SELECT id, user_id, table_id, total_amount, order_status, payment_status, created_at
+       FROM orders WHERE id = ?`,
+      [(orderInsertResult as any).insertId],
+    );
+    const order = orderRows[0];
 
     // Bước 2: Tạo từng order item con
     const insertedItems: IOrderItemRow[] = [];
 
     for (const item of itemsArray) {
-      const itemResult = await client.query<IOrderItemRow>(
+      const [itemInsertResult] = await connection.query(
         `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, order_id, menu_item_id, quantity, unit_price, notes`,
+         VALUES (?, ?, ?, ?, ?)`,
         [order.id, item.menu_item_id, item.quantity, item.unit_price, item.notes ?? null],
       );
-      insertedItems.push(itemResult.rows[0]);
+
+      const [itemRows] = await connection.query<IOrderItemRow[]>(
+        `SELECT id, order_id, menu_item_id, quantity, unit_price, notes
+         FROM order_items WHERE id = ?`,
+        [(itemInsertResult as any).insertId],
+      );
+      insertedItems.push(itemRows[0]);
     }
 
-    await client.query('COMMIT');
+    await connection.commit();
 
     return { order, items: insertedItems };
   } catch (err) {
-    await client.query('ROLLBACK');
+    await connection.rollback();
     throw err;
   } finally {
-    client.release();
+    await connection.release();
   }
 };
 
@@ -165,16 +175,21 @@ export const createOrderWithItems = async (
 export const update = async (id: string, data: IUpdateOrderData): Promise<IOrderRow | null> => {
   const { table_id, order_status, payment_status } = data;
 
-  const result = await pool.query<IOrderRow>(
+  await pool.query(
     `UPDATE orders
-     SET table_id       = COALESCE($1, table_id),
-         order_status   = COALESCE($2, order_status),
-         payment_status = COALESCE($3, payment_status)
-     WHERE id = $4
-     RETURNING id, user_id, table_id, total_amount, order_status, payment_status, created_at`,
+     SET table_id       = COALESCE(?, table_id),
+         order_status   = COALESCE(?, order_status),
+         payment_status = COALESCE(?, payment_status)
+     WHERE id = ?`,
     [table_id ?? null, order_status ?? null, payment_status ?? null, id],
   );
-  return result.rows[0] ?? null;
+
+  const [rows] = await pool.query<IOrderRow[]>(
+    `SELECT id, user_id, table_id, total_amount, order_status, payment_status, created_at FROM orders WHERE id = ?`,
+    [id],
+  );
+
+  return rows[0] ?? null;
 };
 
 /**
@@ -183,9 +198,16 @@ export const update = async (id: string, data: IUpdateOrderData): Promise<IOrder
  * @returns IOrderRow vừa bị xoá, null nếu không tìm thấy
  */
 export const remove = async (id: string): Promise<IOrderRow | null> => {
-  const result = await pool.query<IOrderRow>(
-    'DELETE FROM orders WHERE id = $1 RETURNING id, user_id, table_id, total_amount, order_status, payment_status, created_at',
+  const [rows] = await pool.query<IOrderRow[]>(
+    'SELECT id, user_id, table_id, total_amount, order_status, payment_status, created_at FROM orders WHERE id = ?',
     [id],
   );
-  return result.rows[0] ?? null;
+  const dataToReturn = rows[0];
+
+  await pool.query(
+    'DELETE FROM orders WHERE id = ?',
+    [id],
+  );
+
+  return dataToReturn ?? null;
 };

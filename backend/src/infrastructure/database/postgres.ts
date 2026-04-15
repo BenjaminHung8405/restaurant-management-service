@@ -1,40 +1,38 @@
-import { Pool, PoolClient } from 'pg';
+import mysql from 'mysql2/promise';
 import AppError from '../../utils/AppError';
 
 /**
  * Pool instance duy nhất (Singleton) cho toàn bộ ứng dụng.
- * Sử dụng DATABASE_URL từ biến môi trường (chuỗi kết nối Neon Serverless Postgres).
- * SSL bắt buộc vì Neon yêu cầu kết nối mã hoá TLS.
+ * Sử dụng DATABASE_URL hoặc các biến môi trường riêng cho Vertigo MySQL.
+ * 
+ * Hỗ trợ kết nối qua DATABASE_URL (format: mysql://user:password@host:port/database)
+ * hoặc các biến môi trường riêng lẻ: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT
  */
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: true, // Enforce CA verification in production
-  } : {
-    rejectUnauthorized: false, // Allow self-signed certs in dev
-  },
-  // Pool configuration tuned for Neon serverless
-  max: 10, // Maximum number of clients in the pool
-  min: 2, // Minimum number of clients to keep in pool
-  idleTimeoutMillis: 30000, // How long a client can sit idle before being removed
-  connectionTimeoutMillis: 10000, // How long to wait when acquiring a client
-});
+const getPoolConfig = () => {
+  if (process.env.DATABASE_URL) {
+    // Parse DATABASE_URL nếu được cung cấp
+    // Format: mysql://user:password@host:port/database
+    return {
+      uri: process.env.DATABASE_URL,
+    };
+  }
 
-/**
- * Error handling for pool-level errors
- */
-pool.on('error', (err: Error) => {
-  console.error('Unexpected error on idle client in pool:', err);
-  process.exit(-1);
-});
+  // Fallback to environment variables
+  return {
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'restaurant_db',
+    port: parseInt(process.env.DB_PORT || '3306', 10),
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelayMs: 0,
+  };
+};
 
-pool.on('connect', () => {
-  console.debug('New client connected to pool');
-});
-
-pool.on('remove', () => {
-  console.debug('Client removed from pool');
-});
+const pool = mysql.createPool(getPoolConfig());
 
 /**
  * Verifies the database connection by executing a lightweight probe query.
@@ -43,19 +41,19 @@ pool.on('remove', () => {
  * @throws {AppError} Ném lỗi 500 nếu kết nối thất bại, ngăn server khởi động.
  */
 export const connectDB = async (): Promise<void> => {
-  let client: PoolClient | null = null;
+  let connection = null;
   try {
-    client = await pool.connect();
-    await client.query('SELECT NOW()');
-    console.log('Neon PostgreSQL connected successfully');
+    connection = await pool.getConnection();
+    await connection.ping();
+    console.log('Vertigo MySQL connected successfully');
   } catch (err) {
     throw new AppError(
       `Database connection failed: ${err instanceof Error ? err.message : String(err)}`,
       500,
     );
   } finally {
-    if (client) {
-      client.release();
+    if (connection) {
+      await connection.release();
     }
   }
 };

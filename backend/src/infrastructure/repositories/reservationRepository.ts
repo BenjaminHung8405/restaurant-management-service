@@ -63,43 +63,43 @@ export interface IUpdateReservationData {
  */
 export const findAll = async (userId?: string): Promise<IReservationRow[]> => {
   if (userId) {
-    const result = await pool.query<IReservationRow>(
+    const [rows] = await pool.query<IReservationRow[]>(
       `SELECT id, user_id, table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status
        FROM reservations
-       WHERE user_id = $1
+       WHERE user_id = ?
        ORDER BY reservation_time DESC`,
       [userId],
     );
-    return result.rows;
+    return rows;
   }
 
-  const result = await pool.query<IReservationRow>(
+  const [rows] = await pool.query<IReservationRow[]>(
     `SELECT id, user_id, table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status
      FROM reservations
      ORDER BY reservation_time DESC`,
   );
-  return result.rows;
+  return rows;
 };
 
 /**
  * Tìm đặt bàn theo id (UUID).
- * Dùng parameterized query ($1) để ngăn SQL Injection.
+ * Dùng parameterized query (?) để ngăn SQL Injection.
  *
  * @returns IReservationRow nếu tìm thấy, null nếu không tồn tại
  */
 export const findById = async (id: string): Promise<IReservationRow | null> => {
-  const result = await pool.query<IReservationRow>(
+  const [rows] = await pool.query<IReservationRow[]>(
     `SELECT id, user_id, table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status
      FROM reservations
-     WHERE id = $1 LIMIT 1`,
+     WHERE id = ? LIMIT 1`,
     [id],
   );
-  return result.rows[0] ?? null;
+  return rows[0] ?? null;
 };
 
 /**
  * Tạo đặt bàn mới và trả về row vừa tạo.
- * RETURNING * để lấy đầy đủ dữ liệu bao gồm id UUID do DB sinh ra.
+ * MySQL không hỗ trợ RETURNING, nên INSERT rồi SELECT lại.
  * 
  * Hỗ trợ Guest Reservations:
  * - user_id = null: guest reservation (bắt buộc guest_name & guest_phone)
@@ -119,50 +119,67 @@ export const create = async (data: ICreateReservationData): Promise<IReservation
     status = 'pending' 
   } = data;
 
-  const result = await pool.query<IReservationRow>(
+  const [insertResult] = await pool.query(
     `INSERT INTO reservations (user_id, table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING *`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [user_id, table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status],
   );
-  return result.rows[0];
+
+  const [rows] = await pool.query<IReservationRow[]>(
+    'SELECT * FROM reservations WHERE id = ?',
+    [(insertResult as any).insertId],
+  );
+
+  return rows[0];
 };
 
 /**
  * Cập nhật đặt bàn theo id. Chỉ set các cột có giá trị được truyền vào.
- * Dùng RETURNING * để trả về row sau khi cập nhật.
+ * MySQL không hỗ trợ RETURNING, nên UPDATE rồi SELECT lại.
  *
  * @returns IReservationRow sau khi cập nhật, null nếu không tìm thấy
  */
 export const update = async (id: string, data: IUpdateReservationData): Promise<IReservationRow | null> => {
   const { table_id, reservation_time, guest_count, guest_name, guest_phone, notes, status } = data;
 
-  const result = await pool.query<IReservationRow>(
+  await pool.query(
     `UPDATE reservations
-     SET table_id         = COALESCE($1, table_id),
-         reservation_time = COALESCE($2, reservation_time),
-         guest_count      = COALESCE($3, guest_count),
-         guest_name       = COALESCE($4, guest_name),
-         guest_phone      = COALESCE($5, guest_phone),
-         notes            = COALESCE($6, notes),
-         status           = COALESCE($7, status)
-     WHERE id = $8
-     RETURNING *`,
+     SET table_id         = COALESCE(?, table_id),
+         reservation_time = COALESCE(?, reservation_time),
+         guest_count      = COALESCE(?, guest_count),
+         guest_name       = COALESCE(?, guest_name),
+         guest_phone      = COALESCE(?, guest_phone),
+         notes            = COALESCE(?, notes),
+         status           = COALESCE(?, status)
+     WHERE id = ?`,
     [table_id ?? null, reservation_time ?? null, guest_count ?? null, guest_name ?? null, guest_phone ?? null, notes ?? null, status ?? null, id],
   );
-  return result.rows[0] ?? null;
+
+  const [rows] = await pool.query<IReservationRow[]>(
+    'SELECT * FROM reservations WHERE id = ?',
+    [id],
+  );
+
+  return rows[0] ?? null;
 };
 
 /**
  * Xoá đặt bàn theo id.
- * Dùng RETURNING * để xác nhận bản ghi tồn tại trước khi xoá.
+ * MySQL không hỗ trợ RETURNING, nên SELECT trước rồi DELETE sau.
  *
  * @returns IReservationRow vừa bị xoá, null nếu không tìm thấy
  */
 export const remove = async (id: string): Promise<IReservationRow | null> => {
-  const result = await pool.query<IReservationRow>(
-    'DELETE FROM reservations WHERE id = $1 RETURNING *',
+  const [rows] = await pool.query<IReservationRow[]>(
+    'SELECT * FROM reservations WHERE id = ?',
     [id],
   );
-  return result.rows[0] ?? null;
+  const dataToReturn = rows[0];
+
+  await pool.query(
+    'DELETE FROM reservations WHERE id = ?',
+    [id],
+  );
+
+  return dataToReturn ?? null;
 };

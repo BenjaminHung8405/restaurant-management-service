@@ -35,75 +35,92 @@ export interface IUpdateTableData {
  * @returns Mảng ITableRow
  */
 export const findAll = async (): Promise<ITableRow[]> => {
-  const result = await pool.query<ITableRow>(
+  const [rows] = await pool.query<ITableRow[]>(
     'SELECT id, table_number, capacity, status FROM tables ORDER BY table_number ASC',
   );
-  return result.rows;
+  return rows;
 };
 
 /**
  * Tìm bàn theo id (UUID).
- * Dùng parameterized query ($1) để ngăn SQL Injection.
+ * Dùng parameterized query (?) để ngăn SQL Injection.
  *
  * @returns ITableRow nếu tìm thấy, null nếu không tồn tại
  */
 export const findById = async (id: string): Promise<ITableRow | null> => {
-  const result = await pool.query<ITableRow>(
-    'SELECT id, table_number, capacity, status FROM tables WHERE id = $1 LIMIT 1',
+  const [rows] = await pool.query<ITableRow[]>(
+    'SELECT id, table_number, capacity, status FROM tables WHERE id = ? LIMIT 1',
     [id],
   );
-  return result.rows[0] ?? null;
+  return rows[0] ?? null;
 };
 
 /**
  * Tạo bàn mới và trả về row vừa tạo.
- * RETURNING * để lấy đầy đủ dữ liệu bao gồm id UUID do DB sinh ra.
+ * MySQL không hỗ trợ RETURNING, nên INSERT rồi SELECT lại.
  *
  * @returns ITableRow - bàn vừa tạo
  */
 export const create = async (data: ICreateTableData): Promise<ITableRow> => {
   const { table_number, capacity, status = 'available' } = data;
 
-  const result = await pool.query<ITableRow>(
+  const [insertResult] = await pool.query(
     `INSERT INTO tables (table_number, capacity, status)
-     VALUES ($1, $2, $3)
-     RETURNING *`,
+     VALUES (?, ?, ?)`,
     [table_number, capacity, status],
   );
-  return result.rows[0];
+
+  const [rows] = await pool.query<ITableRow[]>(
+    'SELECT * FROM tables WHERE id = ?',
+    [(insertResult as any).insertId],
+  );
+
+  return rows[0];
 };
 
 /**
  * Cập nhật bàn theo id. Chỉ set các cột có giá trị được truyền vào.
- * Dùng RETURNING * để trả về row sau khi cập nhật.
+ * MySQL không hỗ trợ RETURNING, nên UPDATE rồi SELECT lại.
  *
  * @returns ITableRow sau khi cập nhật, null nếu không tìm thấy
  */
 export const update = async (id: string, data: IUpdateTableData): Promise<ITableRow | null> => {
   const { table_number, capacity, status } = data;
 
-  const result = await pool.query<ITableRow>(
+  await pool.query(
     `UPDATE tables
-     SET table_number = COALESCE($1, table_number),
-         capacity     = COALESCE($2, capacity),
-         status       = COALESCE($3, status)
-     WHERE id = $4
-     RETURNING *`,
+     SET table_number = COALESCE(?, table_number),
+         capacity     = COALESCE(?, capacity),
+         status       = COALESCE(?, status)
+     WHERE id = ?`,
     [table_number ?? null, capacity ?? null, status ?? null, id],
   );
-  return result.rows[0] ?? null;
+
+  const [rows] = await pool.query<ITableRow[]>(
+    'SELECT * FROM tables WHERE id = ?',
+    [id],
+  );
+
+  return rows[0] ?? null;
 };
 
 /**
  * Xoá bàn theo id.
- * Dùng RETURNING * để xác nhận bản ghi tồn tại trước khi xoá.
+ * MySQL không hỗ trợ RETURNING, nên SELECT trước rồi DELETE sau.
  *
  * @returns ITableRow vừa bị xoá, null nếu không tìm thấy
  */
 export const remove = async (id: string): Promise<ITableRow | null> => {
-  const result = await pool.query<ITableRow>(
-    'DELETE FROM tables WHERE id = $1 RETURNING *',
+  const [rows] = await pool.query<ITableRow[]>(
+    'SELECT * FROM tables WHERE id = ?',
     [id],
   );
-  return result.rows[0] ?? null;
+  const dataToReturn = rows[0];
+
+  await pool.query(
+    'DELETE FROM tables WHERE id = ?',
+    [id],
+  );
+
+  return dataToReturn ?? null;
 };
